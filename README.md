@@ -1,8 +1,8 @@
 # 🌌 Probabilistic Flappy Burd
 
-A quantum-inspired Flappy Bird game using Energy-Based Modeling concepts from [THRML](https://docs.thrml.ai/).
+A thermal-inspired Flappy Bird game using Energy-Based Modeling concepts from [THRML](https://docs.thrml.ai/).
 
-![Probabilistic Flappy Burd](https://img.shields.io/badge/quantum-burd-yellow) ![THRML](https://img.shields.io/badge/THRML-inspired-orange)
+![Probabilistic Flappy Burd](https://img.shields.io/badge/thermal-burd-yellow) ![THRML](https://img.shields.io/badge/THRML-inspired-orange)
 
 ## 🎮 Play It Now!
 
@@ -10,7 +10,7 @@ A quantum-inspired Flappy Bird game using Energy-Based Modeling concepts from [T
 
 ## ✨ Features
 
-### 🌟 Quantum Mode
+### 🌟 Thermal Mode
 - See **30 sampled future trajectories** in real-time
 - Probability cloud visualization showing where the bird might go
 - Energy-based sampling using Boltzmann distribution
@@ -98,7 +98,7 @@ python thrml_server.py
 ## 🎯 Controls
 
 - **Click** or **Space** to flap
-- **Quantum Mode button** - Toggle probability cloud visualization
+- **Thermal Mode button** - Toggle probability cloud visualization
 - **Autoplay button** - Let the AI play
 
 ## 📚 Learning Resources
@@ -147,4 +147,4 @@ MIT License - Feel free to use for learning and fun!
 
 ---
 
-**Made with 🌌 quantum mechanics and 🐦 birb energy**
+**Made with 🌌 thermal mechanics and 🐦 birb energy**

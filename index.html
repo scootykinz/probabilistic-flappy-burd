@@ -114,13 +114,13 @@
             background: rgba(100, 255, 100, 1);
         }
         
-        .quantum-btn {
+        .thermal-btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: 2px solid #ffd700;
             animation: pulse 2s infinite;
         }
         
-        .quantum-btn.active {
+        .thermal-btn.active {
             background: linear-gradient(135deg, #00ff88 0%, #00ccff 100%);
             box-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
         }
@@ -226,11 +226,11 @@
         <div id="controls">
             <div id="hamburger" onclick="toggleMenu()">☰</div>
             <div id="controlsMenu">
-                <button class="control-btn quantum-btn" id="quantumHardwareBtn" onclick="toggleQuantumHardware()">
-                    🔮 Quantum HW: OFF
+                <button class="control-btn thermal-btn" id="thermalHardwareBtn" onclick="toggleThermalHardware()">
+                    🔮 Thermal HW: OFF
                 </button>
-                <button class="control-btn active" id="quantumBtn" onclick="toggleQuantumMode()">
-                    🌌 Quantum: ON
+                <button class="control-btn active" id="thermalBtn" onclick="toggleThermalMode()">
+                    🌌 Thermal: ON
                 </button>
                 <button class="control-btn" id="multiBurdBtn" onclick="toggleMultiBurd()">
                     🐦 Multi-Burd: OFF
@@ -257,7 +257,7 @@
             <a href="https://github.com/scootykinz/probabilistic-flappy-burd" target="_blank">GitHub</a>
         </div>
         <div id="thrmlInfo">
-            🔬 THRML Energy-Based Sampling | Toggle Quantum HW for Real THRML! | 
+            🔬 THRML Energy-Based Sampling | Toggle Thermal HW for Real THRML! | 
             <a href="https://docs.thrml.ai" target="_blank" style="color: #ffd700;">THRML Docs</a>
         </div>
         <canvas id="gameCanvas" width="800" height="600"></canvas>
@@ -288,13 +288,13 @@
         const birdSize = 30;
         
         // New features
-        let quantumMode = true;    // Toggle quantum visualization
+        let thermalMode = true;    // Toggle thermal visualization
         let autoplayMode = false;  // AI autoplay
         let gameOverTime = 0;      // Track when game ended
         const GAME_OVER_DELAY = 2000; // 2 seconds before showing game over
         let aiDebugInfo = { targetY: 0, action: 'none' }; // Debug info
         let temperature = 1.0;     // Boltzmann temperature for sampling
-        let quantumHardwareMode = false; // Try to use real THRML backend
+        let thermalHardwareMode = false; // Try to use real THRML backend
         let hardwareConnecting = false;
         let multiBurdMode = false; // Show multiple birds at once
         let multiBurds = [];       // Array of {y, v, trajectory} for each burd
@@ -421,11 +421,11 @@
         
         /**
          * Sample multiple trajectories (like THRML's sample_states function)
-         * Uses real THRML backend if quantum hardware mode is enabled
+         * Uses real THRML backend if thermal hardware mode is enabled
          */
         async function sampleProbabilityCloud() {
-            // Try quantum hardware backend first
-            if (quantumHardwareMode) {
+            // Try thermal hardware backend first
+            if (thermalHardwareMode) {
                 try {
                     const response = await fetch('http://localhost:5001/predict', {
                         method: 'POST',
@@ -450,7 +450,7 @@
                         return; // Success! Use THRML samples
                     }
                 } catch (error) {
-                    console.log('Quantum hardware unavailable, using JS fallback');
+                    console.log('Thermal hardware unavailable, using JS fallback');
                     // Fall through to JavaScript sampling
                 }
             }
@@ -466,16 +466,16 @@
         }
         
         /**
-         * Toggle quantum hardware mode - tries to connect to THRML Python backend
+         * Toggle thermal hardware mode - tries to connect to THRML Python backend
          */
-        async function toggleQuantumHardware() {
-            const btn = document.getElementById('quantumHardwareBtn');
+        async function toggleThermalHardware() {
+            const btn = document.getElementById('thermalHardwareBtn');
             
-            if (quantumHardwareMode) {
+            if (thermalHardwareMode) {
                 // Turn off
-                quantumHardwareMode = false;
+                thermalHardwareMode = false;
                 btn.classList.remove('active');
-                btn.textContent = '🔮 Quantum HW: OFF';
+                btn.textContent = '🔮 Thermal HW: OFF';
                 return;
             }
             
@@ -493,23 +493,23 @@
                 
                 if (response.ok) {
                     // SUCCESS! Backend is running!
-                    quantumHardwareMode = true;
+                    thermalHardwareMode = true;
                     btn.classList.add('active');
-                    btn.textContent = '🔮 Quantum HW: ON';
+                    btn.textContent = '🔮 Thermal HW: ON';
                     alert('🎉 Connected to THRML Backend!\n\nNow using real thermodynamic sampling from the Python server!');
                 } else {
                     throw new Error('Backend not responding');
                 }
             } catch (error) {
                 // Failed - show funny error message
-                quantumHardwareMode = false;
+                thermalHardwareMode = false;
                 btn.classList.remove('active');
-                btn.textContent = '🔮 Quantum HW: OFF';
+                btn.textContent = '🔮 Thermal HW: OFF';
                 
-                alert('⚠️ Quantum Computer Connection Failed\n\n' +
+                alert('⚠️ Thermal Computer Connection Failed\n\n' +
                       'The thermodynamic computer is currently:\n' +
                       '• Taking a nap 😴\n' +
-                      '• Out of quantum fuel ⚛️\n' +
+                      '• Out of thermal fuel ⚛️\n' +
                       '• Or the Python backend isn\'t running\n\n' +
                       'Falling back to JavaScript energy-based sampling!\n\n' +
                       '(To enable: Run `python thrml_server.py` in the repo)');
@@ -527,23 +527,23 @@
             document.getElementById('tempValue').textContent = temperature.toFixed(1);
             
             // Re-sample if game is running
-            if (gameRunning && quantumMode) {
+            if (gameRunning && thermalMode) {
                 sampleProbabilityCloud();
             }
         }
         
         /**
-         * Toggle quantum visualization mode
+         * Toggle thermal visualization mode
          */
-        function toggleQuantumMode() {
-            quantumMode = !quantumMode;
-            const btn = document.getElementById('quantumBtn');
-            if (quantumMode) {
+        function toggleThermalMode() {
+            thermalMode = !thermalMode;
+            const btn = document.getElementById('thermalBtn');
+            if (thermalMode) {
                 btn.classList.add('active');
-                btn.textContent = '🌌 Quantum: ON';
+                btn.textContent = '🌌 Thermal: ON';
             } else {
                 btn.classList.remove('active');
-                btn.textContent = '🌌 Quantum: OFF';
+                btn.textContent = '🌌 Thermal: OFF';
             }
             // Auto-close menu on mobile/smaller screens
             if (window.innerWidth < 600) {
@@ -947,10 +947,10 @@
         }
         
         /**
-         * Draw probability cloud (the cool quantum effect!)
+         * Draw probability cloud (the cool thermal effect!)
          */
         function drawProbabilityCloud() {
-            if (!gameRunning || probabilityCloud.length === 0 || !quantumMode) return;
+            if (!gameRunning || probabilityCloud.length === 0 || !thermalMode) return;
             
             // Draw each sampled trajectory with transparency
             probabilityCloud.forEach((traj, idx) => {
@@ -1128,14 +1128,14 @@
             if (autoplayMode) {
                 if (aiDecideFlap()) {
                     birdVelocity = flapPower;
-                    if (quantumMode) {
+                    if (thermalMode) {
                         sampleProbabilityCloud();
                     }
                 }
             }
             
-            // Sample probability cloud every 10 frames (if quantum mode on)
-            if (quantumMode && frameCount % 10 === 0) {
+            // Sample probability cloud every 10 frames (if thermal mode on)
+            if (thermalMode && frameCount % 10 === 0) {
                 sampleProbabilityCloud();
             }
             
@@ -1172,9 +1172,9 @@
         }
         
         function updateScoreDisplay() {
-            const quantumText = quantumMode ? '🌌' : '';
+            const thermalText = thermalMode ? '🌌' : '';
             const autoText = autoplayMode ? '🤖' : '';
-            document.getElementById('info').textContent = `Score: ${score} ${quantumText} ${autoText}`;
+            document.getElementById('info').textContent = `Score: ${score} ${thermalText} ${autoText}`;
         }
         
         function checkCollisions() {
@@ -1248,7 +1248,7 @@
                 if (!autoplayMode) {
                     birdVelocity = flapPower;
                     // Re-sample immediately on flap for responsive feel
-                    if (quantumMode) {
+                    if (thermalMode) {
                         sampleProbabilityCloud();
                     }
                 }
@@ -1258,7 +1258,7 @@
         function startGame() {
             gameStarted = true;
             gameRunning = true;
-            if (quantumMode) {
+            if (thermalMode) {
                 sampleProbabilityCloud();  // Initial sampling
             }
             updateScoreDisplay();
@@ -1277,7 +1277,7 @@
             showOptimalPath = false;
             optimalPathData = null;
             document.getElementById('optimalPathBtn').style.display = 'none';
-            if (quantumMode) {
+            if (thermalMode) {
                 sampleProbabilityCloud();
             }
             if (multiBurdMode) {
