@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Probabilistic Flappy Burd - THRML Inspired</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: 'Courier New', monospace;
+        }
+        
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 0 50px rgba(255, 107, 107, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        canvas {
+            display: block;
+            background: linear-gradient(180deg, #0a1128 0%, #1a1a2e 100%);
+            cursor: pointer;
+        }
+        
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #ffd700;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 10;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .control-btn {
+            background: rgba(255, 107, 107, 0.8);
+            border: 2px solid #ffd700;
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+            transition: all 0.2s;
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 107, 107, 1);
+            transform: scale(1.05);
+        }
+        
+        .control-btn.active {
+            background: rgba(100, 255, 100, 0.8);
+            border-color: #00ff00;
+        }
+        
+        .control-btn.active:hover {
+            background: rgba(100, 255, 100, 1);
+        }
+        
+        #instructions {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            color: #88ccff;
+            font-size: 14px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+            z-index: 10;
+            display: none;
+        }
+        
+        #thrmlInfo {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            color: #88ccff;
+            font-size: 12px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+            z-index: 10;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="info">Score: 0</div>
+        <div id="controls">
+            <button class="control-btn active" id="quantumBtn" onclick="toggleQuantumMode()">
+                🌌 Quantum: ON
+            </button>
+            <button class="control-btn" id="autoplayBtn" onclick="toggleAutoplay()">
+                🤖 Autoplay: OFF
+            </button>
+        </div>
+        <div id="instructions">Click anywhere to Flap!</div>
+        <div id="thrmlInfo">
+            🔬 THRML-Inspired Energy-Based Sampling | 
+            <a href="https://docs.thrml.ai" target="_blank" style="color: #ffd700;">THRML Docs</a>
+        </div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let score = 0;
+        let gameRunning = false;
+        let gameStarted = false;
+        let birdY = 100;
+        let birdVelocity = 0;
+        const gravity = 0.25;
+        const flapPower = -6.5;
+        const maxFallSpeed = 8;
+        const birdX = 150;
+        const birdSize = 30;
+        
+        // New features
+        let quantumMode = true;    // Toggle quantum visualization
+        let autoplayMode = false;  // AI autoplay
+        let gameOverTime = 0;      // Track when game ended
+        const GAME_OVER_DELAY = 2000; // 2 seconds before showing game over
+        let aiDebugInfo = { targetY: 0, action: 'none' }; // Debug info
+        
+        // Pipe configuration
+        const pipeWidth = 80;
+        const pipeGap = 220;
+        let pipes = [];
+        let pipeSpeed = 2.5;
+        let frameCount = 0;
+        let gracePeriod = 180;
+        
+        // THRML-INSPIRED PROBABILISTIC SAMPLING
+        // This uses energy-based modeling concepts from THRML
+        let probabilityCloud = [];  // Stores sampled future trajectories
+        const NUM_SAMPLES = 30;     // Number of trajectories to sample
+        const PREDICTION_STEPS = 20; // How many frames to predict ahead
+        
+        /**
+         * THRML-Inspired Energy Function
+         * Lower energy = more likely state
+         * Based on Energy-Based Models (EBMs) from THRML documentation
+         */
+        function calculateEnergy(y, velocity, pipes, timeStep) {
+            let energy = 0;
+            
+            // Gravity term: lower positions have lower energy when falling
+            if (velocity > 0) {
+                energy += (y / canvas.height) * 0.5;  // Falling is natural
+            } else {
+                energy -= (y / canvas.height) * 0.3;  // Going up costs energy
+            }
+            
+            // Boundary penalties (high energy near floor/ceiling)
+            if (y < 50) energy += 3.0;
+            if (y > canvas.height - 50) energy += 3.0;
+            
+            // Pipe collision penalties
+            pipes.forEach(pipe => {
+                const pipeAtTime = pipe.x - (pipeSpeed * timeStep);
+                if (Math.abs(pipeAtTime - birdX) < pipeWidth + birdSize) {
+                    // Bird is at pipe X position
+                    if (y < pipe.topHeight || y > pipe.bottomY) {
+                        energy += 10.0;  // HUGE penalty for collision
+                    } else {
+                        energy -= 1.0;   // Reward for threading the gap
+                    }
+                }
+            });
+            
+            return energy;
+        }
+        
+        /**
+         * Gibbs Sampling (inspired by THRML's block Gibbs sampling)
+         * Sample from probability distribution proportional to exp(-energy)
+         */
+        function sampleTrajectory(startY, startVelocity, pipes, temperature = 1.0) {
+            const trajectory = [{y: startY, v: startVelocity}];
+            let currentY = startY;
+            let currentV = startVelocity;
+            
+            for (let t = 0; t < PREDICTION_STEPS; t++) {
+                // Sample multiple possible next states
+                const candidates = [];
+                
+                // Option 1: Flap (add upward velocity)
+                let flapY = currentY;
+                let flapV = -6.5;
+                flapV += gravity;
+                flapV = Math.min(flapV, maxFallSpeed);
+                flapY += flapV;
+                const flapEnergy = calculateEnergy(flapY, flapV, pipes, t);
+                candidates.push({y: flapY, v: flapV, energy: flapEnergy});
+                
+                // Option 2: Don't flap (let gravity work)
+                let fallY = currentY;
+                let fallV = currentV + gravity;
+                fallV = Math.min(fallV, maxFallSpeed);
+                fallY += fallV;
+                const fallEnergy = calculateEnergy(fallY, fallV, pipes, t);
+                candidates.push({y: fallY, v: fallV, energy: fallEnergy});
+                
+                // Option 3: Small random perturbation (exploration)
+                let perturbY = currentY;
+                let perturbV = currentV + (Math.random() - 0.5) * 2;
+                perturbV += gravity;
+                perturbV = Math.min(perturbV, maxFallSpeed);
+                perturbY += perturbV;
+                const perturbEnergy = calculateEnergy(perturbY, perturbV, pipes, t);
+                candidates.push({y: perturbY, v: perturbV, energy: perturbEnergy});
+                
+                // Boltzmann distribution: P(state) ∝ exp(-energy / temperature)
+                // Lower energy = higher probability
+                const weights = candidates.map(c => Math.exp(-c.energy / temperature));
+                const totalWeight = weights.reduce((a, b) => a + b, 0);
+                const probabilities = weights.map(w => w / totalWeight);
+                
+                // Sample according to probabilities
+                const rand = Math.random();
+                let cumulative = 0;
+                let selected = candidates[0];
+                for (let i = 0; i < probabilities.length; i++) {
+                    cumulative += probabilities[i];
+                    if (rand < cumulative) {
+                        selected = candidates[i];
+                        break;
+                    }
+                }
+                
+                // Clamp to screen bounds
+                selected.y = Math.max(0, Math.min(canvas.height, selected.y));
+                
+                currentY = selected.y;
+                currentV = selected.v;
+                trajectory.push({y: currentY, v: currentV});
+            }
+            
+            return trajectory;
+        }
+        
+        /**
+         * Sample multiple trajectories (like THRML's sample_states function)
+         */
+        function sampleProbabilityCloud() {
+            probabilityCloud = [];
+            for (let i = 0; i < NUM_SAMPLES; i++) {
+                // Add temperature variation for diversity
+                const temperature = 0.8 + Math.random() * 0.4;  // 0.8 to 1.2
+                const traj = sampleTrajectory(birdY, birdVelocity, pipes, temperature);
+                probabilityCloud.push(traj);
+            }
+        }
+        
+        /**
+         * Toggle quantum visualization mode
+         */
+        function toggleQuantumMode() {
+            quantumMode = !quantumMode;
+            const btn = document.getElementById('quantumBtn');
+            if (quantumMode) {
+                btn.classList.add('active');
+                btn.textContent = '🌌 Quantum: ON';
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = '🌌 Quantum: OFF';
+            }
+        }
+        
+        /**
+         * Toggle autoplay mode
+         */
+        function toggleAutoplay() {
+            autoplayMode = !autoplayMode;
+            const btn = document.getElementById('autoplayBtn');
+            if (autoplayMode) {
+                btn.classList.add('active');
+                btn.textContent = '🤖 Autoplay: ON';
+                if (!gameStarted) {
+                    startGame();
+                }
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = '🤖 Autoplay: OFF';
+            }
+        }
+        
+        /**
+         * AI Autoplay - uses probability cloud to make decisions!
+         */
+        function aiDecideFlap() {
+            if (!autoplayMode || !gameRunning) return false;
+            
+            // CRITICAL: Don't flap during grace period when there are no pipes!
+            if (frameCount <= gracePeriod) {
+                // Just maintain a good height before pipes start
+                if (birdY > canvas.height * 0.6 && birdVelocity > 4) {
+                    aiDebugInfo = { targetY: canvas.height * 0.6, action: 'grace-maintain' };
+                    return true;
+                }
+                if (birdY > canvas.height - 100) {
+                    aiDebugInfo = { targetY: canvas.height - 100, action: 'grace-floor' };
+                    return true;
+                }
+                aiDebugInfo = { targetY: canvas.height * 0.6, action: 'grace-wait' };
+                return false;
+            }
+            
+            // Find the next pipe we need to navigate
+            const nextPipe = pipes.find(p => p.x + pipeWidth > birdX);
+            
+            if (!nextPipe) {
+                // No pipes yet or all pipes passed - maintain center-low height
+                const targetHeight = canvas.height * 0.55; // Stay lower!
+                aiDebugInfo.targetY = targetHeight;
+                
+                if (birdY > targetHeight + 50 && birdVelocity > 2) {
+                    aiDebugInfo.action = 'no-pipe-maintain';
+                    return true;
+                }
+                
+                if (birdY > canvas.height - 100) {
+                    aiDebugInfo.action = 'no-pipe-floor';
+                    return true;
+                }
+                
+                aiDebugInfo.action = 'no-pipe-coast';
+                return false;
+            }
+            
+            // We have a pipe to navigate
+            const pipeDistance = nextPipe.x - birdX;
+            const gapTop = nextPipe.topHeight;
+            const gapBottom = nextPipe.bottomY;
+            const gapCenter = (gapTop + gapBottom) / 2;
+            const gapSize = gapBottom - gapTop;
+            
+            // KEY FIX: Aim for BELOW center - let gravity do the work!
+            // This prevents the upward trending issue
+            const idealY = gapCenter + 20;  // Aim BELOW center, not above!
+            aiDebugInfo.targetY = idealY;
+            
+            // Decision logic based on distance to pipe
+            if (pipeDistance > 150) {
+                // We're far away - just don't hit the floor
+                
+                // Only flap if we're getting dangerously low
+                if (birdY > idealY + 60) {
+                    aiDebugInfo.action = 'far-too-low';
+                    return true;
+                }
+                
+                // Floor emergency
+                if (birdY > canvas.height - 120) {
+                    aiDebugInfo.action = 'far-floor-danger';
+                    return true;
+                }
+                
+                // Otherwise let gravity work - don't flap!
+                aiDebugInfo.action = 'far-coast';
+                return false;
+                
+            } else if (pipeDistance > 80) {
+                // Medium distance - start positioning but stay low
+                
+                // Only flap if below the ideal (lower) position
+                if (birdY > idealY + 30) {
+                    aiDebugInfo.action = 'mid-position';
+                    return true;
+                }
+                
+                // If falling fast toward bottom, tap the brakes
+                if (birdY > gapBottom - 100 && birdVelocity > 5) {
+                    aiDebugInfo.action = 'mid-falling-fast';
+                    return true;
+                }
+                
+                aiDebugInfo.action = 'mid-coast';
+                return false;
+                
+            } else {
+                // We're close to the pipe - precise control
+                
+                // Only flap if we're in the bottom 70% of the gap
+                if (birdY > gapTop + (gapSize * 0.7)) {
+                    aiDebugInfo.action = 'close-bottom-danger';
+                    return true;
+                }
+                
+                // Emergency bottom pipe
+                if (birdY > gapBottom - 70) {
+                    aiDebugInfo.action = 'EMERGENCY-bottom';
+                    return true;
+                }
+                
+                // If we're in a good position (top half) and not falling too fast, coast!
+                if (birdY < gapCenter && birdVelocity < 5) {
+                    aiDebugInfo.action = 'close-good-coast';
+                    return false;
+                }
+                
+                // If falling moderately in lower half, gentle correction
+                if (birdY > gapCenter && birdVelocity > 3) {
+                    aiDebugInfo.action = 'close-lower-correct';
+                    return true;
+                }
+                
+                aiDebugInfo.action = 'close-cruise';
+                return false;
+            }
+            
+            // This should rarely be hit now
+            aiDebugInfo.action = 'fallthrough';
+            return false;
+        }
+        
+        // Stars for background
+        const stars = [];
+        for (let i = 0; i < 100; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                radius: Math.random() * 2,
+                opacity: Math.random() * 0.5 + 0.5
+            });
+        }
+        
+        function createPipe() {
+            const minHeight = 100;
+            
+            // Progressive difficulty based on score
+            let pipeGapSize = pipeGap;
+            if (score < 5) {
+                // Very easy - huge gap
+                pipeGapSize = 280;
+            } else if (score < 10) {
+                // Easy - big gap
+                pipeGapSize = 250;
+            } else if (score < 20) {
+                // Medium - normal gap
+                pipeGapSize = 220;
+            } else {
+                // Hard - smaller gap
+                pipeGapSize = 200;
+            }
+            
+            const maxHeight = canvas.height - pipeGapSize - minHeight;
+            
+            // For first 5 pipes, keep them centered (easier to hit)
+            let topHeight;
+            if (score < 3) {
+                // First 3 pipes - very centered
+                const centerY = canvas.height / 2;
+                topHeight = centerY - (pipeGapSize / 2);
+            } else if (score < 5) {
+                // Next 2 pipes - slightly random but still centered-ish
+                const centerY = canvas.height / 2;
+                const variance = 50;
+                topHeight = centerY - (pipeGapSize / 2) + (Math.random() - 0.5) * variance;
+            } else {
+                // After score 5 - full randomness
+                topHeight = Math.random() * (maxHeight - minHeight) + minHeight;
+            }
+            
+            pipes.push({
+                x: canvas.width,
+                topHeight: topHeight,
+                bottomY: topHeight + pipeGapSize,
+                passed: false
+            });
+        }
+        
+        function drawBackground() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#0a1128');
+            gradient.addColorStop(1, '#1a1a2e');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            stars.forEach(star => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        function drawPipes() {
+            pipes.forEach(pipe => {
+                const gradient = ctx.createLinearGradient(pipe.x, 0, pipe.x + pipeWidth, 0);
+                gradient.addColorStop(0, '#ff6b6b');
+                gradient.addColorStop(0.5, '#ee5a6f');
+                gradient.addColorStop(1, '#ff6b6b');
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+                ctx.fillRect(pipe.x, pipe.bottomY, pipeWidth, canvas.height - pipe.bottomY);
+                
+                ctx.strokeStyle = 'rgba(255, 107, 107, 0.5)';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(pipe.x, 0, pipeWidth, pipe.topHeight);
+                ctx.strokeRect(pipe.x, pipe.bottomY, pipeWidth, canvas.height - pipe.bottomY);
+            });
+        }
+        
+        /**
+         * Draw probability cloud (the cool quantum effect!)
+         */
+        function drawProbabilityCloud() {
+            if (!gameRunning || probabilityCloud.length === 0 || !quantumMode) return;
+            
+            // Draw each sampled trajectory with transparency
+            probabilityCloud.forEach((traj, idx) => {
+                ctx.save();
+                ctx.globalAlpha = 0.1;  // Very transparent
+                
+                // Color based on trajectory index (for variety)
+                const hue = 40 + (idx / NUM_SAMPLES) * 40;  // Yellow to orange
+                ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.moveTo(birdX, birdY);
+                
+                traj.forEach((point, t) => {
+                    const x = birdX + t * 3;  // Visualize forward in time
+                    ctx.lineTo(x, point.y);
+                });
+                
+                ctx.stroke();
+                ctx.restore();
+            });
+            
+            // Draw heatmap dots showing probability density
+            const heatmapBins = 20;
+            const binHeight = canvas.height / heatmapBins;
+            const binCounts = new Array(heatmapBins).fill(0);
+            
+            // Count how many trajectories pass through each bin (in near future)
+            probabilityCloud.forEach(traj => {
+                for (let t = 0; t < Math.min(10, traj.length); t++) {
+                    const bin = Math.floor((traj[t].y / canvas.height) * heatmapBins);
+                    if (bin >= 0 && bin < heatmapBins) {
+                        binCounts[bin]++;
+                    }
+                }
+            });
+            
+            const maxCount = Math.max(...binCounts);
+            binCounts.forEach((count, i) => {
+                if (count > 0) {
+                    const alpha = count / maxCount;
+                    ctx.fillStyle = `rgba(255, 200, 100, ${alpha * 0.3})`;
+                    ctx.fillRect(birdX + 40, i * binHeight, 60, binHeight);
+                }
+            });
+        }
+        
+        function drawBird() {
+            ctx.save();
+            
+            // Show AI debug info
+            if (autoplayMode && gameRunning) {
+                // Draw target line
+                ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, aiDebugInfo.targetY);
+                ctx.lineTo(canvas.width, aiDebugInfo.targetY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Draw AI action text
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.font = '14px Courier New';
+                ctx.fillText(`AI: ${aiDebugInfo.action}`, 10, canvas.height - 10);
+            }
+            
+            // Outer glow
+            const gradient = ctx.createRadialGradient(birdX, birdY, 0, birdX, birdY, birdSize * 1.5);
+            gradient.addColorStop(0, 'rgba(255, 220, 100, 0.8)');
+            gradient.addColorStop(0.5, 'rgba(255, 180, 100, 0.4)');
+            gradient.addColorStop(1, 'rgba(255, 107, 107, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(birdX, birdY, birdSize * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Inner bird
+            const birdGradient = ctx.createRadialGradient(birdX, birdY, 0, birdX, birdY, birdSize);
+            birdGradient.addColorStop(0, '#ffeb3b');
+            birdGradient.addColorStop(0.7, '#ffc107');
+            birdGradient.addColorStop(1, '#ff9800');
+            
+            ctx.fillStyle = birdGradient;
+            ctx.beginPath();
+            ctx.arc(birdX, birdY, birdSize, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Eye
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(birdX + 8, birdY - 5, 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(birdX + 10, birdY - 7, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
+        function update() {
+            if (!gameRunning) return;
+            
+            frameCount++;
+            
+            // AI autoplay decision - check EVERY frame for better responsiveness
+            if (autoplayMode) {
+                if (aiDecideFlap()) {
+                    birdVelocity = flapPower;
+                    if (quantumMode) {
+                        sampleProbabilityCloud();
+                    }
+                }
+            }
+            
+            // Sample probability cloud every 10 frames (if quantum mode on)
+            if (quantumMode && frameCount % 10 === 0) {
+                sampleProbabilityCloud();
+            }
+            
+            // Bird physics
+            birdVelocity += gravity;
+            if (birdVelocity > maxFallSpeed) {
+                birdVelocity = maxFallSpeed;
+            }
+            birdY += birdVelocity;
+            
+            if (frameCount > gracePeriod) {
+                pipes.forEach(pipe => {
+                    pipe.x -= pipeSpeed;
+                    
+                    if (!pipe.passed && pipe.x + pipeWidth < birdX) {
+                        pipe.passed = true;
+                        score++;
+                        updateScoreDisplay();
+                    }
+                });
+                
+                pipes = pipes.filter(pipe => pipe.x > -pipeWidth);
+                
+                if ((frameCount - gracePeriod) % 120 === 0) {
+                    createPipe();
+                }
+                
+                checkCollisions();
+            } else {
+                if (birdY - birdSize < 0 || birdY + birdSize > canvas.height) {
+                    gameOver();
+                }
+            }
+        }
+        
+        function updateScoreDisplay() {
+            const quantumText = quantumMode ? '🌌' : '';
+            const autoText = autoplayMode ? '🤖' : '';
+            document.getElementById('info').textContent = `Score: ${score} ${quantumText} ${autoText}`;
+        }
+        
+        function checkCollisions() {
+            if (birdY - birdSize < 0 || birdY + birdSize > canvas.height) {
+                gameOver();
+                return;
+            }
+            
+            pipes.forEach(pipe => {
+                if (birdX + birdSize > pipe.x && birdX - birdSize < pipe.x + pipeWidth) {
+                    if (birdY - birdSize < pipe.topHeight || birdY + birdSize > pipe.bottomY) {
+                        gameOver();
+                    }
+                }
+            });
+        }
+        
+        function gameOver() {
+            if (!gameRunning) return;  // Already game over
+            gameRunning = false;
+            gameOverTime = Date.now();
+        }
+        
+        function drawGameOverScreen() {
+            const timeSinceGameOver = Date.now() - gameOverTime;
+            
+            // Show game over screen after delay
+            if (timeSinceGameOver > GAME_OVER_DELAY) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#ffd700';
+                ctx.font = 'bold 48px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over!', canvas.width/2, canvas.height/2 - 40);
+                
+                ctx.fillStyle = '#88ccff';
+                ctx.font = '24px Courier New';
+                ctx.fillText(`Final Score: ${score}`, canvas.width/2, canvas.height/2 + 10);
+                ctx.fillText('Click to Restart', canvas.width/2, canvas.height/2 + 50);
+            } else {
+                // During delay, show a small indicator
+                const alpha = Math.min(timeSinceGameOver / GAME_OVER_DELAY, 0.5);
+                ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#fff';
+                ctx.font = '32px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText('COLLISION!', canvas.width/2, canvas.height/2);
+            }
+        }
+        
+        function flap() {
+            if (!gameStarted) {
+                startGame();
+            } else if (!gameRunning) {
+                // Only allow restart after delay has passed
+                const timeSinceGameOver = Date.now() - gameOverTime;
+                if (timeSinceGameOver > GAME_OVER_DELAY) {
+                    restartGame();
+                }
+            } else {
+                // Don't allow manual flapping in autoplay mode
+                if (!autoplayMode) {
+                    birdVelocity = flapPower;
+                    // Re-sample immediately on flap for responsive feel
+                    if (quantumMode) {
+                        sampleProbabilityCloud();
+                    }
+                }
+            }
+        }
+        
+        function startGame() {
+            gameStarted = true;
+            gameRunning = true;
+            if (quantumMode) {
+                sampleProbabilityCloud();  // Initial sampling
+            }
+            updateScoreDisplay();
+            document.getElementById('instructions').style.display = 'none';
+        }
+        
+        function restartGame() {
+            score = 0;
+            birdY = 100;
+            birdVelocity = 0;
+            pipes = [];
+            frameCount = 0;
+            probabilityCloud = [];
+            gameRunning = true;
+            gameOverTime = 0;
+            if (quantumMode) {
+                sampleProbabilityCloud();
+            }
+            updateScoreDisplay();
+        }
+        
+        function gameLoop() {
+            drawBackground();
+            drawProbabilityCloud();  // Draw BEFORE pipes so trails go behind
+            drawPipes();
+            drawBird();
+            
+            if (!gameStarted) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#ffd700';
+                ctx.font = 'bold 48px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText('Probabilistic Flappy Burd', canvas.width/2, canvas.height/2 - 60);
+                
+                ctx.fillStyle = '#88ccff';
+                ctx.font = '24px Courier New';
+                ctx.fillText('Click or Press Space to Start', canvas.width/2, canvas.height/2 + 20);
+                
+                ctx.font = '18px Courier New';
+                ctx.fillStyle = '#ffeb3b';
+                ctx.fillText('Or enable Autoplay and watch the AI!', canvas.width/2, canvas.height/2 + 60);
+            } else if (!gameRunning) {
+                // Game over state
+                drawGameOverScreen();
+            }
+            
+            update();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        canvas.addEventListener('click', flap);
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                flap();
+            }
+        });
+        
+        gameLoop();
+    </script>
+</body>
+</html>
