@@ -44,9 +44,46 @@
             top: 20px;
             right: 20px;
             z-index: 10;
+        }
+        
+        #hamburger {
+            background: rgba(255, 107, 107, 0.8);
+            border: 2px solid #ffd700;
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 24px;
+            transition: all 0.3s;
+            width: 50px;
+            height: 50px;
             display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #hamburger:hover {
+            background: rgba(255, 107, 107, 1);
+            transform: scale(1.1);
+        }
+        
+        #controlsMenu {
+            position: absolute;
+            top: 60px;
+            right: 0;
+            background: rgba(26, 26, 46, 0.95);
+            border: 2px solid #ffd700;
+            border-radius: 10px;
+            padding: 15px;
+            display: none;
             flex-direction: column;
             gap: 10px;
+            min-width: 200px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        #controlsMenu.open {
+            display: flex;
         }
         
         .control-btn {
@@ -77,6 +114,57 @@
             background: rgba(100, 255, 100, 1);
         }
         
+        .quantum-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: 2px solid #ffd700;
+            animation: pulse 2s infinite;
+        }
+        
+        .quantum-btn.active {
+            background: linear-gradient(135deg, #00ff88 0%, #00ccff 100%);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(102, 126, 234, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(102, 126, 234, 0.8); }
+        }
+        
+        .temp-control {
+            background: rgba(26, 26, 46, 0.8);
+            border: 2px solid #ffd700;
+            padding: 10px;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 12px;
+        }
+        
+        .temp-slider {
+            width: 100%;
+            margin-top: 5px;
+        }
+        
+        #footer {
+            position: absolute;
+            bottom: 50px;
+            left: 20px;
+            right: 20px;
+            color: #88ccff;
+            font-size: 11px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+            z-index: 10;
+            text-align: center;
+        }
+        
+        #footer a {
+            color: #ffd700;
+            text-decoration: none;
+        }
+        
+        #footer a:hover {
+            text-decoration: underline;
+        }
+        
         #instructions {
             position: absolute;
             top: 60px;
@@ -105,14 +193,31 @@
     <div id="gameContainer">
         <div id="info">Score: 0</div>
         <div id="controls">
-            <button class="control-btn active" id="quantumBtn" onclick="toggleQuantumMode()">
-                🌌 Quantum: ON
-            </button>
-            <button class="control-btn" id="autoplayBtn" onclick="toggleAutoplay()">
-                🤖 Autoplay: OFF
-            </button>
+            <div id="hamburger" onclick="toggleMenu()">☰</div>
+            <div id="controlsMenu">
+                <button class="control-btn quantum-btn" id="quantumHardwareBtn" onclick="toggleQuantumHardware()">
+                    🔮 Quantum HW: OFF
+                </button>
+                <button class="control-btn active" id="quantumBtn" onclick="toggleQuantumMode()">
+                    🌌 Quantum: ON
+                </button>
+                <button class="control-btn" id="autoplayBtn" onclick="toggleAutoplay()">
+                    🤖 Autoplay: OFF
+                </button>
+                <div class="temp-control">
+                    <div>🌡️ Temperature: <span id="tempValue">1.0</span></div>
+                    <input type="range" class="temp-slider" id="tempSlider" 
+                           min="0.5" max="2.0" step="0.1" value="1.0" 
+                           onchange="updateTemperature(this.value)">
+                </div>
+            </div>
         </div>
         <div id="instructions">Click anywhere to Flap!</div>
+        <div id="footer">
+            Made for <a href="https://partiful.com/e/82h0A4OKfmNJPG3T81qR" target="_blank">THRML-HACK Hackathon</a> | 
+            By <a href="https://x.com/scootykins" target="_blank">@scootykins</a> | 
+            <a href="https://github.com/scootykinz/probabilistic-flappy-burd" target="_blank">GitHub</a>
+        </div>
         <div id="thrmlInfo">
             🔬 THRML-Inspired Energy-Based Sampling | 
             <a href="https://docs.thrml.ai" target="_blank" style="color: #ffd700;">THRML Docs</a>
@@ -123,6 +228,14 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        
+        /**
+         * Toggle hamburger menu
+         */
+        function toggleMenu() {
+            const menu = document.getElementById('controlsMenu');
+            menu.classList.toggle('open');
+        }
         
         // Game state
         let score = 0;
@@ -142,6 +255,9 @@
         let gameOverTime = 0;      // Track when game ended
         const GAME_OVER_DELAY = 2000; // 2 seconds before showing game over
         let aiDebugInfo = { targetY: 0, action: 'none' }; // Debug info
+        let temperature = 1.0;     // Boltzmann temperature for sampling
+        let quantumHardwareMode = false; // Try to use real THRML backend
+        let hardwareConnecting = false;
         
         // Pipe configuration
         const pipeWidth = 80;
@@ -196,7 +312,8 @@
          * Gibbs Sampling (inspired by THRML's block Gibbs sampling)
          * Sample from probability distribution proportional to exp(-energy)
          */
-        function sampleTrajectory(startY, startVelocity, pipes, temperature = 1.0) {
+        function sampleTrajectory(startY, startVelocity, pipes, temp = null) {
+            const samplingTemp = temp || temperature; // Use global temperature if not specified
             const trajectory = [{y: startY, v: startVelocity}];
             let currentY = startY;
             let currentV = startVelocity;
@@ -233,7 +350,7 @@
                 
                 // Boltzmann distribution: P(state) ∝ exp(-energy / temperature)
                 // Lower energy = higher probability
-                const weights = candidates.map(c => Math.exp(-c.energy / temperature));
+                const weights = candidates.map(c => Math.exp(-c.energy / samplingTemp));
                 const totalWeight = weights.reduce((a, b) => a + b, 0);
                 const probabilities = weights.map(w => w / totalWeight);
                 
@@ -262,14 +379,114 @@
         
         /**
          * Sample multiple trajectories (like THRML's sample_states function)
+         * Uses real THRML backend if quantum hardware mode is enabled
          */
-        function sampleProbabilityCloud() {
+        async function sampleProbabilityCloud() {
+            // Try quantum hardware backend first
+            if (quantumHardwareMode) {
+                try {
+                    const response = await fetch('http://localhost:5000/predict', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            birdY: birdY,
+                            velocity: birdVelocity,
+                            pipes: pipes.map(p => ({
+                                x: p.x,
+                                topHeight: p.topHeight,
+                                bottomY: p.bottomY
+                            }))
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        // Convert backend trajectories to our format
+                        probabilityCloud = data.trajectories.map(traj => 
+                            traj.map(y => ({ y: y, v: 0 }))
+                        );
+                        return; // Success! Use THRML samples
+                    }
+                } catch (error) {
+                    console.log('Quantum hardware unavailable, using JS fallback');
+                    // Fall through to JavaScript sampling
+                }
+            }
+            
+            // JavaScript fallback sampling
             probabilityCloud = [];
             for (let i = 0; i < NUM_SAMPLES; i++) {
-                // Add temperature variation for diversity
-                const temperature = 0.8 + Math.random() * 0.4;  // 0.8 to 1.2
-                const traj = sampleTrajectory(birdY, birdVelocity, pipes, temperature);
+                // Temperature variation adds diversity
+                const tempVariation = temperature * (0.8 + Math.random() * 0.4);
+                const traj = sampleTrajectory(birdY, birdVelocity, pipes, tempVariation);
                 probabilityCloud.push(traj);
+            }
+        }
+        
+        /**
+         * Toggle quantum hardware mode - tries to connect to THRML Python backend
+         */
+        async function toggleQuantumHardware() {
+            const btn = document.getElementById('quantumHardwareBtn');
+            
+            if (quantumHardwareMode) {
+                // Turn off
+                quantumHardwareMode = false;
+                btn.classList.remove('active');
+                btn.textContent = '🔮 Quantum HW: OFF';
+                return;
+            }
+            
+            // Try to connect!
+            hardwareConnecting = true;
+            btn.textContent = '⚡ Connecting...';
+            btn.disabled = true;
+            
+            try {
+                // Try to ping the Python backend
+                const response = await fetch('http://localhost:5000/health', {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                if (response.ok) {
+                    // SUCCESS! Backend is running!
+                    quantumHardwareMode = true;
+                    btn.classList.add('active');
+                    btn.textContent = '🔮 Quantum HW: ON';
+                    alert('🎉 Connected to THRML Backend!\n\nNow using real thermodynamic sampling from the Python server!');
+                } else {
+                    throw new Error('Backend not responding');
+                }
+            } catch (error) {
+                // Failed - show funny error message
+                quantumHardwareMode = false;
+                btn.classList.remove('active');
+                btn.textContent = '🔮 Quantum HW: OFF';
+                
+                alert('⚠️ Quantum Computer Connection Failed\n\n' +
+                      'The thermodynamic computer is currently:\n' +
+                      '• Taking a nap 😴\n' +
+                      '• Out of quantum fuel ⚛️\n' +
+                      '• Or the Python backend isn\'t running\n\n' +
+                      'Falling back to JavaScript energy-based sampling!\n\n' +
+                      '(To enable: Run `python thrml_server.py` in the repo)');
+            }
+            
+            hardwareConnecting = false;
+            btn.disabled = false;
+        }
+        
+        /**
+         * Update temperature parameter for Boltzmann sampling
+         */
+        function updateTemperature(value) {
+            temperature = parseFloat(value);
+            document.getElementById('tempValue').textContent = temperature.toFixed(1);
+            
+            // Re-sample if game is running
+            if (gameRunning && quantumMode) {
+                sampleProbabilityCloud();
             }
         }
         
@@ -285,6 +502,10 @@
             } else {
                 btn.classList.remove('active');
                 btn.textContent = '🌌 Quantum: OFF';
+            }
+            // Auto-close menu on mobile/smaller screens
+            if (window.innerWidth < 600) {
+                toggleMenu();
             }
         }
         
@@ -303,6 +524,10 @@
             } else {
                 btn.classList.remove('active');
                 btn.textContent = '🤖 Autoplay: OFF';
+            }
+            // Auto-close menu on mobile/smaller screens
+            if (window.innerWidth < 600) {
+                toggleMenu();
             }
         }
         

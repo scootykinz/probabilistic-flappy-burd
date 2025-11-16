@@ -6,7 +6,7 @@ A quantum-inspired Flappy Bird game using Energy-Based Modeling concepts from [T
 
 ## 🎮 Play It Now!
 
-**[Play the game here!](https://YOUR_USERNAME.github.io/probabilistic-flappy-burd/)**
+**[Play the game here!](https://scootykinz.github.io/probabilistic-flappy-burd/)**
 
 ## ✨ Features
 
