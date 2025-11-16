@@ -165,6 +165,37 @@
             text-decoration: underline;
         }
         
+        #energyVisualizer {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 30px;
+            height: 400px;
+            background: rgba(26, 26, 46, 0.8);
+            border: 2px solid #ffd700;
+            border-radius: 5px;
+            padding: 5px;
+            z-index: 5;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 2px;
+        }
+        
+        .energy-bar {
+            flex: 1;
+            border-radius: 2px;
+            transition: background-color 0.2s;
+        }
+        
+        #optimalPath {
+            display: none;
+        }
+        
+        .ghost-bird {
+            opacity: 0.6;
+        }
+        
         #instructions {
             position: absolute;
             top: 60px;
@@ -201,8 +232,14 @@
                 <button class="control-btn active" id="quantumBtn" onclick="toggleQuantumMode()">
                     🌌 Quantum: ON
                 </button>
+                <button class="control-btn" id="multiBurdBtn" onclick="toggleMultiBurd()">
+                    🐦 Multi-Burd: OFF
+                </button>
                 <button class="control-btn" id="autoplayBtn" onclick="toggleAutoplay()">
                     🤖 Autoplay: OFF
+                </button>
+                <button class="control-btn" id="optimalPathBtn" onclick="toggleOptimalPath()" style="display:none;">
+                    👻 Show Optimal
                 </button>
                 <div class="temp-control">
                     <div>🌡️ Temperature: <span id="tempValue">1.0</span></div>
@@ -212,6 +249,7 @@
                 </div>
             </div>
         </div>
+        <div id="energyVisualizer"></div>
         <div id="instructions">Click anywhere to Flap!</div>
         <div id="footer">
             Made for <a href="https://partiful.com/e/82h0A4OKfmNJPG3T81qR" target="_blank">THRML-HACK Hackathon</a> | 
@@ -258,6 +296,10 @@
         let temperature = 1.0;     // Boltzmann temperature for sampling
         let quantumHardwareMode = false; // Try to use real THRML backend
         let hardwareConnecting = false;
+        let multiBurdMode = false; // Show multiple birds at once
+        let multiBurds = [];       // Array of {y, v, trajectory} for each burd
+        let showOptimalPath = false; // Show the best path after game over
+        let optimalPathData = null;  // Stores the optimal trajectory
         
         // Pipe configuration
         const pipeWidth = 80;
@@ -510,6 +552,129 @@
         }
         
         /**
+         * Toggle multi-burd mode
+         */
+        function toggleMultiBurd() {
+            multiBurdMode = !multiBurdMode;
+            const btn = document.getElementById('multiBurdBtn');
+            if (multiBurdMode) {
+                btn.classList.add('active');
+                btn.textContent = '🐦 Multi-Burd: ON';
+                initializeMultiBurds();
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = '🐦 Multi-Burd: OFF';
+                multiBurds = [];
+            }
+            if (window.innerWidth < 600) {
+                toggleMenu();
+            }
+        }
+        
+        /**
+         * Toggle optimal path display
+         */
+        function toggleOptimalPath() {
+            showOptimalPath = !showOptimalPath;
+            const btn = document.getElementById('optimalPathBtn');
+            if (showOptimalPath) {
+                btn.classList.add('active');
+                btn.textContent = '👻 Hiding Optimal';
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = '👻 Show Optimal';
+            }
+        }
+        
+        /**
+         * Initialize multiple burds from probability distribution
+         */
+        function initializeMultiBurds() {
+            multiBurds = [];
+            const numBurds = 10;
+            
+            for (let i = 0; i < numBurds; i++) {
+                multiBurds.push({
+                    y: birdY,
+                    v: birdVelocity,
+                    trajectory: probabilityCloud[i] || []
+                });
+            }
+        }
+        
+        /**
+         * Update multi-burds each frame
+         */
+        function updateMultiBurds() {
+            if (!multiBurdMode || !gameRunning) return;
+            
+            // Re-sample trajectories periodically
+            if (frameCount % 10 === 0 && probabilityCloud.length > 0) {
+                multiBurds.forEach((burd, i) => {
+                    if (probabilityCloud[i]) {
+                        burd.trajectory = probabilityCloud[i];
+                    }
+                });
+            }
+            
+            // Update each burd's position from its trajectory
+            multiBurds.forEach((burd, i) => {
+                if (burd.trajectory && burd.trajectory.length > 0) {
+                    // Follow the sampled trajectory
+                    const trajIndex = Math.min(frameCount % 20, burd.trajectory.length - 1);
+                    if (burd.trajectory[trajIndex]) {
+                        burd.y = burd.trajectory[trajIndex].y;
+                        burd.v = burd.trajectory[trajIndex].v || 0;
+                    }
+                }
+            });
+        }
+        
+        /**
+         * Calculate optimal (lowest energy) path through pipes
+         */
+        function calculateOptimalPath() {
+            if (!pipes || pipes.length === 0) return null;
+            
+            const pathLength = 200;
+            const optimalPath = [];
+            let currentY = birdY;
+            let currentV = 0;
+            
+            for (let step = 0; step < pathLength; step++) {
+                // Find next pipe
+                const futureX = birdX + (step * pipeSpeed);
+                const relevantPipe = pipes.find(p => 
+                    p.x > futureX - 50 && p.x < futureX + 100
+                );
+                
+                let targetY;
+                if (relevantPipe) {
+                    // Aim for center of gap
+                    targetY = (relevantPipe.topHeight + relevantPipe.bottomY) / 2;
+                } else {
+                    // Maintain middle height
+                    targetY = canvas.height * 0.45;
+                }
+                
+                // Move toward target with physics
+                if (currentY > targetY + 20) {
+                    currentV = -6; // Flap
+                } else {
+                    currentV += gravity;
+                    currentV = Math.min(currentV, maxFallSpeed);
+                }
+                
+                currentY += currentV;
+                currentY = Math.max(50, Math.min(canvas.height - 50, currentY));
+                
+                optimalPath.push({ x: birdX + step * 2, y: currentY });
+            }
+            
+            return optimalPath;
+        }
+        
+        /**
          * Toggle autoplay mode
          */
         function toggleAutoplay() {
@@ -671,6 +836,38 @@
             });
         }
         
+        // Initialize energy visualizer
+        const energyViz = document.getElementById('energyVisualizer');
+        const HEIGHT_BINS = 20;
+        for (let i = 0; i < HEIGHT_BINS; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'energy-bar';
+            bar.id = `energy-bar-${i}`;
+            energyViz.appendChild(bar);
+        }
+        
+        /**
+         * Update energy visualizer bars
+         */
+        function updateEnergyVisualizer() {
+            if (!gameRunning) return;
+            
+            for (let i = 0; i < HEIGHT_BINS; i++) {
+                const y = (i / HEIGHT_BINS) * canvas.height;
+                const energy = calculateEnergy(y, 0, pipes, 0);
+                
+                // Map energy to color (blue = low, red = high)
+                const normalizedEnergy = Math.min(energy / 10, 1);
+                const hue = (1 - normalizedEnergy) * 240; // 240 = blue, 0 = red
+                const color = `hsl(${hue}, 80%, 50%)`;
+                
+                const bar = document.getElementById(`energy-bar-${HEIGHT_BINS - 1 - i}`);
+                if (bar) {
+                    bar.style.backgroundColor = color;
+                }
+            }
+        }
+        
         function createPipe() {
             const minHeight = 100;
             
@@ -823,39 +1020,92 @@
                 ctx.fillText(`AI: ${aiDebugInfo.action}`, 10, canvas.height - 10);
             }
             
+            // Draw multi-burds if enabled
+            if (multiBurdMode && multiBurds.length > 0) {
+                multiBurds.forEach((burd, i) => {
+                    drawSingleBird(burd.y, 0.3); // Draw with transparency
+                });
+            }
+            
+            // Draw main bird (always on top)
+            drawSingleBird(birdY, 1.0);
+            
+            ctx.restore();
+        }
+        
+        /**
+         * Draw a single bird at given Y position
+         */
+        function drawSingleBird(y, alpha = 1.0) {
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            
             // Outer glow
-            const gradient = ctx.createRadialGradient(birdX, birdY, 0, birdX, birdY, birdSize * 1.5);
+            const gradient = ctx.createRadialGradient(birdX, y, 0, birdX, y, birdSize * 1.5);
             gradient.addColorStop(0, 'rgba(255, 220, 100, 0.8)');
             gradient.addColorStop(0.5, 'rgba(255, 180, 100, 0.4)');
             gradient.addColorStop(1, 'rgba(255, 107, 107, 0)');
             
             ctx.fillStyle = gradient;
             ctx.beginPath();
-            ctx.arc(birdX, birdY, birdSize * 1.5, 0, Math.PI * 2);
+            ctx.arc(birdX, y, birdSize * 1.5, 0, Math.PI * 2);
             ctx.fill();
             
             // Inner bird
-            const birdGradient = ctx.createRadialGradient(birdX, birdY, 0, birdX, birdY, birdSize);
+            const birdGradient = ctx.createRadialGradient(birdX, y, 0, birdX, y, birdSize);
             birdGradient.addColorStop(0, '#ffeb3b');
             birdGradient.addColorStop(0.7, '#ffc107');
             birdGradient.addColorStop(1, '#ff9800');
             
             ctx.fillStyle = birdGradient;
             ctx.beginPath();
-            ctx.arc(birdX, birdY, birdSize, 0, Math.PI * 2);
+            ctx.arc(birdX, y, birdSize, 0, Math.PI * 2);
             ctx.fill();
             
-            // Eye
-            ctx.fillStyle = '#000';
+            // Eye (only on main bird)
+            if (alpha === 1.0) {
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(birdX + 8, y - 5, 4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(birdX + 10, y - 7, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+        
+        /**
+         * Draw optimal path (ghost trail)
+         */
+        function drawOptimalPath() {
+            if (!showOptimalPath || !optimalPathData) return;
+            
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 100, 0.6)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 5]);
+            
             ctx.beginPath();
-            ctx.arc(birdX + 8, birdY - 5, 4, 0, Math.PI * 2);
-            ctx.fill();
+            optimalPathData.forEach((point, i) => {
+                if (i === 0) {
+                    ctx.moveTo(point.x, point.y);
+                } else {
+                    ctx.lineTo(point.x, point.y);
+                }
+            });
+            ctx.stroke();
             
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(birdX + 10, birdY - 7, 2, 0, Math.PI * 2);
-            ctx.fill();
+            // Draw ghost bird at end of path
+            if (optimalPathData.length > 0) {
+                const endPoint = optimalPathData[Math.min(frameCount % optimalPathData.length, optimalPathData.length - 1)];
+                drawSingleBird(endPoint.y, 0.4);
+            }
             
+            ctx.setLineDash([]);
             ctx.restore();
         }
         
@@ -863,6 +1113,16 @@
             if (!gameRunning) return;
             
             frameCount++;
+            
+            // Update energy visualizer
+            if (frameCount % 5 === 0) {
+                updateEnergyVisualizer();
+            }
+            
+            // Update multi-burds
+            if (multiBurdMode) {
+                updateMultiBurds();
+            }
             
             // AI autoplay decision - check EVERY frame for better responsiveness
             if (autoplayMode) {
@@ -936,6 +1196,12 @@
             if (!gameRunning) return;  // Already game over
             gameRunning = false;
             gameOverTime = Date.now();
+            
+            // Calculate optimal path for replay
+            optimalPathData = calculateOptimalPath();
+            
+            // Show optimal path button
+            document.getElementById('optimalPathBtn').style.display = 'block';
         }
         
         function drawGameOverScreen() {
@@ -1008,8 +1274,14 @@
             probabilityCloud = [];
             gameRunning = true;
             gameOverTime = 0;
+            showOptimalPath = false;
+            optimalPathData = null;
+            document.getElementById('optimalPathBtn').style.display = 'none';
             if (quantumMode) {
                 sampleProbabilityCloud();
+            }
+            if (multiBurdMode) {
+                initializeMultiBurds();
             }
             updateScoreDisplay();
         }
@@ -1017,6 +1289,7 @@
         function gameLoop() {
             drawBackground();
             drawProbabilityCloud();  // Draw BEFORE pipes so trails go behind
+            drawOptimalPath();       // Draw optimal path if showing
             drawPipes();
             drawBird();
             
