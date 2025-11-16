@@ -170,6 +170,6 @@ def health():
 
 if __name__ == '__main__':
     print("🚀 Starting THRML Flappy Bird Server...")
-    print("📡 Server running on http://localhost:5000")
+    print("📡 Server running on http://localhost:5001")
     print("🐦 Ready to predict bird trajectories!")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)

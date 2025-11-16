@@ -257,7 +257,7 @@
             <a href="https://github.com/scootykinz/probabilistic-flappy-burd" target="_blank">GitHub</a>
         </div>
         <div id="thrmlInfo">
-            🔬 THRML-Inspired Energy-Based Sampling | 
+            🔬 THRML Energy-Based Sampling | Toggle Quantum HW for Real THRML! | 
             <a href="https://docs.thrml.ai" target="_blank" style="color: #ffd700;">THRML Docs</a>
         </div>
         <canvas id="gameCanvas" width="800" height="600"></canvas>
@@ -427,7 +427,7 @@
             // Try quantum hardware backend first
             if (quantumHardwareMode) {
                 try {
-                    const response = await fetch('http://localhost:5000/predict', {
+                    const response = await fetch('http://localhost:5001/predict', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -486,7 +486,7 @@
             
             try {
                 // Try to ping the Python backend
-                const response = await fetch('http://localhost:5000/health', {
+                const response = await fetch('http://localhost:5001/health', {
                     method: 'GET',
                     mode: 'cors'
                 });
